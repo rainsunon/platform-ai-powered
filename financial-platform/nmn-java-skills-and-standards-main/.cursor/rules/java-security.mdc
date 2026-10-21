@@ -1,0 +1,25 @@
+---
+description: Security rules — always active for all Java files
+globs: "**/*.java"
+alwaysApply: true
+---
+
+# Security Rules
+
+- All secrets via `@ConfigurationProperties` typed records — never in source code or `application.yml` literals.
+- All endpoints authenticated unless explicitly marked `.permitAll()` in `SecurityFilterChain`.
+- Input validation via `jakarta.validation` annotations + `@Valid` on every `@RequestBody`.
+- SQL injection prevention: Spring Data derived queries or JPQL `:named` parameters only — never string concatenation or `String.format()` into SQL.
+- `BCryptPasswordEncoder(12)` or `Argon2PasswordEncoder` for password hashing — never SHA-256 / MD5 / `.equals()` comparisons.
+- `SecureRandom` for tokens and IDs — never `java.util.Random` for security.
+- `MessageDigest.isEqual()` for secret comparisons — never `.equals()` on secret strings (timing attack).
+- Never log sensitive data (passwords, tokens, PII, full card numbers, JWT values).
+- CORS configured from `AppProperties` allowlist — never `config.addAllowedOrigin("*")` with `allowCredentials(true)`.
+- Rate limiting on all auth endpoints — `Bucket4j` + Redis for distributed limiting.
+- `@JsonIgnore` on `passwordHash` and all sensitive entity fields.
+- `RestClient` / `WebClient` always has explicit connect + read timeouts — never default client.
+- Spring `server.tomcat.connection-timeout` set — protects against slowloris attacks.
+- `@PreAuthorize` at the service layer — not just the controller layer.
+- `SecurityHeadersFilter` sets `Strict-Transport-Security`, `X-Content-Type-Options`, `X-Frame-Options`, `Content-Security-Policy`.
+
+Reference: `skills/common/security.md`, `skills/common/api-auth.md`

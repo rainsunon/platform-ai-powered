@@ -1,0 +1,13 @@
+# Local integration profile. Human-readable logs, local PostgreSQL.
+# Port 5432 is another PostgreSQL 18 cluster that does not accept the financing role.
+# This profile uses the project cluster on 5433 (backend/.local/pgdata).
+spring:
+  datasource:
+    url: ${POSTGRES_URL:jdbc:postgresql://localhost:5433/financing}
+    username: ${POSTGRES_USER:financing}
+    password: ${POSTGRES_PASSWORD:financing}
+
+logging:
+  structured:
+    format:
+      console:

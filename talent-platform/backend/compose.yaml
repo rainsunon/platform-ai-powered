@@ -1,0 +1,27 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+      FINANCING_DB_PASSWORD: financing
+    ports:
+      - "5432:5432"
+    command:
+      - postgres
+      - -c
+      - idle_in_transaction_session_timeout=30s
+      - -c
+      - idle_session_timeout=10min
+    volumes:
+      - financing-pg:/var/lib/postgresql/data
+      - ./docker/postgres/init-financing.sh:/docker-entrypoint-initdb.d/init-financing.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  financing-pg:

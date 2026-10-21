@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!-- Complex queries use MyBatis. These statements run on local PostgreSQL. -->
+<mapper namespace="io.rydata.platform.financing.ledger.LedgerQueryMapper">
+
+    <resultMap id="ledgerSearch" type="io.rydata.platform.financing.ledger.LedgerSearchRow">
+        <id column="id" property="id"/>
+        <result column="ref" property="ref"/>
+        <result column="posted_label" property="date"/>
+        <result column="entity_name" property="entity"/>
+        <result column="client_name" property="client"/>
+        <result column="account_code" property="accountCode"/>
+        <result column="category" property="category"/>
+        <result column="amount" property="amount"/>
+        <result column="type" property="type"/>
+        <result column="status" property="status"/>
+        <result column="method" property="method"/>
+        <result column="requires_dual_sign" property="requiresDualSign"/>
+        <result column="approved" property="approved"/>
+        <collection property="tags" ofType="string" javaType="java.util.ArrayList">
+            <result column="tag"/>
+        </collection>
+    </resultMap>
+
+    <resultMap id="spendFact" type="io.rydata.platform.financing.budget.BudgetMonitor$SpendFact">
+        <constructor>
+            <arg column="account_code" javaType="java.lang.String"/>
+            <arg column="category" javaType="java.lang.String"/>
+            <arg column="direction" javaType="java.lang.String"/>
+            <arg column="amount" javaType="java.math.BigDecimal"/>
+        </constructor>
+    </resultMap>
+
+    <!-- Complex query: ledger search. Use MyBatis for complex queries. -->
+    <select id="search" resultMap="ledgerSearch">
+        SELECT transaction.id,
+               transaction.ref,
+               transaction.posted_label,
+               transaction.entity_name,
+               transaction.client_name,
+               transaction.account_code,
+               transaction.category,
+               transaction.amount,
+               lower(transaction.direction) AS type,
+               lower(transaction.status) AS status,
+               transaction.method,
+               transaction.requires_dual_sign,
+               transaction.approved,
+               tag.tag
+        FROM ledger_transaction transaction
+        LEFT JOIN ledger_transaction_tag tag ON tag.transaction_id = transaction.id
+        WHERE (#{entity} = '' OR transaction.entity_name = #{entity})
+          AND (#{client} = '' OR transaction.client_name = #{client})
+          AND (#{accountCode} = '' OR transaction.account_code = #{accountCode})
+          AND (
+                #{tag} = ''
+                OR EXISTS (
+                    SELECT 1
+                    FROM ledger_transaction_tag match
+                    WHERE match.transaction_id = transaction.id
+                      AND match.tag = #{tag}
+                )
+              )
+          AND (
+                #{query} = ''
+                OR lower(transaction.ref) LIKE lower(concat('%', #{query}, '%'))
+                OR lower(transaction.client_name) LIKE lower(concat('%', #{query}, '%'))
+                OR lower(transaction.entity_name) LIKE lower(concat('%', #{query}, '%'))
+                OR lower(transaction.category) LIKE lower(concat('%', #{query}, '%'))
+              )
+        ORDER BY transaction.created_at DESC, tag.tag_order ASC
+    </select>
+
+    <!-- Complex query: budget spend facts. Use MyBatis for complex queries. -->
+    <select id="findSpendFacts" resultMap="spendFact">
+        SELECT transaction.account_code,
+               transaction.category,
+               lower(transaction.direction) AS direction,
+               transaction.amount
+        FROM ledger_transaction transaction
+    </select>
+</mapper>

@@ -1,0 +1,6 @@
+{
+  "name": "Nova Ledger - Enterprise OS",
+  "description": "Enterprise-grade double-entry general ledger, dual-signature governance queue, dynamic RBAC view simulator, and encrypted client financial portal.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

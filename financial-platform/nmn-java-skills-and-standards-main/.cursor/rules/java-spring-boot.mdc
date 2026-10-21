@@ -1,0 +1,166 @@
+---
+description: Spring Boot layer rules — auto-attached to controller and service files
+globs: ["src/main/java/**/controller/**", "src/main/java/**/service/**"]
+alwaysApply: false
+---
+
+# Spring Boot Layer Rules
+
+## Controller layer (`controller/`)
+
+- Return `ResponseEntity<T>` from every method — never raw types
+- Annotate class with `@RestController` + `@RequestMapping("/api/v1/{resource}")`
+- Use `@RequiredArgsConstructor` for constructor injection — never `@Autowired`
+- Add `@Valid` on every `@RequestBody` parameter — without exception
+- Never put business logic in controllers — delegate everything to the service layer
+- Never call repositories directly from controllers — always via service
+- Never return JPA entities — always map to a response DTO before returning
+- Use `@Operation` and `@ApiResponse` OpenAPI annotations on every endpoint
+- Return `ResponseEntity.created(location).body(response)` on `@PostMapping` (201 + Location header)
+- Return `ResponseEntity.noContent().build()` on `@DeleteMapping` (204)
+- Never try/catch in controllers — let `GlobalExceptionHandler` handle all exceptions
+- Use `@PageableDefault` for list endpoints that accept `Pageable`
+- Validate sort fields against a whitelist — never pass user-supplied sort fields directly to JPA
+
+```java
+// Correct controller pattern
+@RestController
+@RequestMapping("/api/v1/orders")
+@RequiredArgsConstructor
+@Tag(name = "Orders", description = "Order management endpoints")
+public class OrderController {
+
+  private final OrderService orderService;
+
+  @Operation(summary = "Get order by ID")
+  @ApiResponse(responseCode = "200", description = "Order found")
+  @ApiResponse(responseCode = "404", description = "Order not found")
+  @GetMapping("/{id}")
+  public ResponseEntity<OrderResponse> findById(@PathVariable Long id) {
+    return ResponseEntity.ok(orderService.findById(id));
+  }
+
+  @Operation(summary = "Create a new order")
+  @ApiResponse(responseCode = "201", description = "Order created")
+  @ApiResponse(responseCode = "400", description = "Validation failed")
+  @PostMapping
+  public ResponseEntity<OrderResponse> create(
+      @Valid @RequestBody OrderRequest request) {
+    OrderResponse created = orderService.create(request);
+    URI location = ServletUriComponentsBuilder
+        .fromCurrentRequest().path("/{id}")
+        .buildAndExpand(created.id()).toUri();
+    return ResponseEntity.created(location).body(created);
+  }
+
+  @DeleteMapping("/{id}")
+  public ResponseEntity<Void> delete(@PathVariable Long id) {
+    orderService.delete(id);
+    return ResponseEntity.noContent().build();
+  }
+}
+```
+
+Reference: `skills/spring-boot/SKILL.md` hard rules #2 #3 #4 #6
+
+---
+
+## Service layer (`service/` + `service/impl/`)
+
+- Always create `{Feature}Service` interface in `service/` with Javadoc on every method
+- Always create `{Feature}ServiceImpl` in `service/impl/` annotated with `@Service`
+- Use `@RequiredArgsConstructor` for constructor injection — never `@Autowired`
+- Throw typed `AppException` subclasses — never throw bare `RuntimeException`
+- Never import `HttpStatus` or `ResponseEntity` in service layer
+- Use `Optional.orElseThrow(() -> new ResourceNotFoundException(...))` for not-found
+- Annotate write methods with `@Transactional` on the implementation (not the interface)
+- `@Transactional` on public methods only — private methods are silently ignored by Spring AOP
+- Never log at ERROR level in service layer — let `GlobalExceptionHandler` log at the boundary
+- Use `@PreAuthorize` at service layer for method-level security — not just controller
+- Never call `MDC.put()` directly in service methods — MDC is set in filters
+
+```java
+// Correct service interface
+public interface OrderService {
+
+  /**
+   * Finds an order by its ID.
+   *
+   * @param id the order ID
+   * @return the order as a response DTO
+   * @throws ResourceNotFoundException if no order exists with the given ID
+   */
+  OrderResponse findById(Long id);
+
+  /**
+   * Creates a new order.
+   *
+   * @param request the order creation payload
+   * @return the created order as a response DTO
+   * @throws ConflictException if an order with the same reference already exists
+   */
+  OrderResponse create(OrderRequest request);
+
+  /**
+   * Deletes an order by its ID.
+   *
+   * @param id the order ID
+   * @throws ResourceNotFoundException if no order exists with the given ID
+   */
+  void delete(Long id);
+}
+
+// Correct service implementation
+@Service
+@RequiredArgsConstructor
+@Slf4j
+public class OrderServiceImpl implements OrderService {
+
+  private final OrderRepository orderRepository;
+  private final OrderMapper     orderMapper;
+
+  @Override
+  public OrderResponse findById(Long id) {
+    return orderRepository.findById(id)
+        .map(orderMapper::toResponse)
+        .orElseThrow(() -> new ResourceNotFoundException("Order not found: " + id));
+  }
+
+  @Override
+  @Transactional
+  public OrderResponse create(OrderRequest request) {
+    log.info("Creating order: customerId={}", request.customerId());
+    Order saved = orderRepository.save(orderMapper.toEntity(request));
+    log.info("Order created: orderId={}", saved.getId());
+    return orderMapper.toResponse(saved);
+  }
+
+  @Override
+  @Transactional
+  public void delete(Long id) {
+    Order order = orderRepository.findById(id)
+        .orElseThrow(() -> new ResourceNotFoundException("Order not found: " + id));
+    orderRepository.delete(order);
+    log.info("Order deleted: orderId={}", id);
+  }
+}
+```
+
+Reference: `skills/spring-boot/SKILL.md` hard rules #1 #2 #13, `skills/common/error-handling.md`
+
+---
+
+## Exception hierarchy (use these — never bare RuntimeException)
+
+```
+AppException
+├── ResourceNotFoundException   → 404  throw when entity not found
+├── ValidationException         → 400  throw for business rule violations
+├── ConflictException           → 409  throw for duplicate / state conflicts
+├── ForbiddenException          → 403  throw for ownership / permission checks
+├── UnauthorizedException       → 401  throw for missing / invalid auth
+├── RateLimitedException        → 429  throw when rate limit exceeded
+└── ExternalServiceException    → 502  throw when downstream call fails
+```
+
+Reference: `skills/common/error-handling.md`

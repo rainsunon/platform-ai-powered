@@ -1,0 +1,192 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# NMN Spring Boot — Base application.yml template
+# Replace {project-name} with your actual project name.
+# All secrets via environment variables — never hardcode values here.
+# ─────────────────────────────────────────────────────────────────────────────
+
+spring:
+  application:
+    name: {project-name}
+
+  # ── Datasource (PostgreSQL + HikariCP) ──────────────────────────────────
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:{project-name}}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+    hikari:
+      maximum-pool-size: 10          # tune per service load profile
+      minimum-idle: 2
+      connection-timeout: 30000      # 30s — fail fast on pool exhaustion
+      idle-timeout: 600000           # 10 min
+      max-lifetime: 1800000          # 30 min — recycle before DB kills connection
+      keepalive-time: 30000          # 30s — prevents idle connection drops
+
+  # ── JPA ─────────────────────────────────────────────────────────────────
+  jpa:
+    hibernate:
+      ddl-auto: validate             # NEVER update/create in non-local environments
+    show-sql: false                  # enable only in local profile
+    open-in-view: false              # disable OSIV — causes lazy loading issues
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+        default_batch_fetch_size: 25 # N+1 prevention for collections
+        jdbc:
+          batch_size: 25             # batch inserts/updates
+
+  # ── Flyway ──────────────────────────────────────────────────────────────
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    validate-on-migrate: true
+    out-of-order: false              # never allow out-of-order migrations
+    baseline-on-migrate: false       # only true when adding Flyway to existing DB
+
+  # ── Redis ────────────────────────────────────────────────────────────────
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      timeout: 2000ms
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 4
+          min-idle: 1
+
+  # ── Kafka ────────────────────────────────────────────────────────────────
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      acks: all                      # wait for all replicas — never 0 or 1
+      retries: 3
+      properties:
+        enable.idempotence: true
+        max.in.flight.requests.per.connection: 1
+        delivery.timeout.ms: 120000
+    consumer:
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      auto-offset-reset: earliest
+      enable-auto-commit: false      # NEVER auto-commit
+      properties:
+        spring.json.trusted.packages: "com.nmn.*"  # NEVER use *
+        isolation.level: read_committed
+    listener:
+      ack-mode: RECORD
+      concurrency: 3
+
+  # ── Jackson ──────────────────────────────────────────────────────────────
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false   # ISO 8601 strings not epoch millis
+    time-zone: UTC
+    default-property-inclusion: non_null
+
+# ── Server ───────────────────────────────────────────────────────────────────
+server:
+  port: ${SERVER_PORT:8080}
+  shutdown: graceful                 # wait for in-flight requests on SIGTERM
+  tomcat:
+    connection-timeout: 5s           # slowloris protection
+    keep-alive-timeout: 120s
+    threads:
+      max: 200
+      min-spare: 10
+
+  # ── Graceful shutdown timeout ─────────────────────────────────────────────
+  lifecycle:
+    timeout-per-shutdown-phase: 30s  # must match Kubernetes terminationGracePeriodSeconds
+
+# ── Actuator + Health probes ─────────────────────────────────────────────────
+management:
+  endpoint:
+    health:
+      probes:
+        enabled: true                # /actuator/health/liveness + /actuator/health/readiness
+      show-details: when-authorized
+      group:
+        liveness:
+          include: livenessState
+        readiness:
+          include: readinessState, db, redis
+  endpoints:
+    web:
+      exposure:
+        include: health, info, metrics, prometheus
+  metrics:
+    tags:
+      application: ${spring.application.name}
+  tracing:
+    sampling:
+      probability: ${OTEL_SAMPLING_PROBABILITY:0.1}   # 10% in prod; 1.0 in dev
+  otlp:
+    tracing:
+      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4318/v1/traces}
+
+# ── Build info (exposed via /actuator/info) ──────────────────────────────────
+info:
+  app:
+    name: ${spring.application.name}
+    version: ${APP_VERSION:dev}
+    commit: ${APP_COMMIT:unknown}
+    build-date: ${APP_BUILD_DATE:unknown}
+
+# ── Resilience4j ─────────────────────────────────────────────────────────────
+resilience4j:
+  circuitbreaker:
+    instances:
+      default:
+        slidingWindowSize: 10
+        failureRateThreshold: 50
+        waitDurationInOpenState: 30s
+        permittedNumberOfCallsInHalfOpenState: 1
+        registerHealthIndicator: true
+  retry:
+    instances:
+      default:
+        maxAttempts: 3
+        waitDuration: 500ms
+        enableExponentialBackoff: true
+        exponentialBackoffMultiplier: 2.0
+        retryExceptions:
+          - org.springframework.web.client.ResourceAccessException
+          - com.nmn.{project-name}.exception.ExternalServiceException
+        ignoreExceptions:
+          - com.nmn.{project-name}.exception.ResourceNotFoundException
+  timelimiter:
+    instances:
+      default:
+        timeoutDuration: 5s
+
+# ── springdoc OpenAPI ────────────────────────────────────────────────────────
+springdoc:
+  api-docs:
+    path: /api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    enabled: ${SWAGGER_ENABLED:false}  # disable in production
+
+# ── Application-specific config ──────────────────────────────────────────────
+app:
+  jwt:
+    secret: ${JWT_SECRET}                              # min 32 chars, random
+    expiration-ms: ${JWT_EXPIRATION_MS:900000}         # 15 minutes default
+    refresh-expiration-ms: ${JWT_REFRESH_MS:604800000} # 7 days default
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000}
+  kafka:
+    group-id: ${KAFKA_CONSUMER_GROUP_ID:{project-name}-consumer-group}
+
+# ── Logging ──────────────────────────────────────────────────────────────────
+logging:
+  level:
+    root: WARN
+    com.nmn: INFO
+    org.springframework.web: WARN
+    org.hibernate.SQL: WARN          # set to DEBUG in local profile only
+    org.flywaydb: INFO

@@ -1,0 +1,30 @@
+name: Publish npm Package
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          # Do not set registry-url: setup-node writes
+          # //registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN} and npm then
+          # skips OIDC trusted publishing (E404 + 2FA token notice).
+          package-manager-cache: false
+      - run: npm ci
+      - run: npm run validate
+      - run: npm run index:check
+      - run: npm run marketplaces:check
+      - run: npm test
+      - run: npm install --global npm@latest
+      - run: npm publish --access public

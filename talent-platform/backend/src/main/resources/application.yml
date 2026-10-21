@@ -1,0 +1,88 @@
+spring:
+  profiles:
+    default: local
+  application:
+    name: financing
+  autoconfigure:
+    exclude:
+      - org.springframework.ai.model.chat.memory.repository.redis.autoconfigure.RedisChatMemoryRepositoryAutoConfiguration
+      - org.springframework.ai.vectorstore.pgvector.autoconfigure.PgVectorStoreAutoConfiguration
+  datasource:
+    # Local PostgreSQL. Use MyBatis for complex queries.
+    url: ${POSTGRES_URL:jdbc:postgresql://localhost:5432/financing}
+    username: ${POSTGRES_USER:financing}
+    password: ${POSTGRES_PASSWORD:financing}
+    hikari:
+      pool-name: financing
+      maximum-pool-size: ${POSTGRES_POOL_SIZE:10}
+      minimum-idle: 2
+      connection-timeout: 3000
+      idle-timeout: 60000
+      max-lifetime: 1800000
+      keepalive-time: 30000
+      connection-init-sql: SET idle_in_transaction_session_timeout = '30s'
+      data-source-properties:
+        # Unnamed prepares stay valid if a transaction-mode pooler is added later.
+        prepareThreshold: 0
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        jdbc.time_zone: UTC
+        default_batch_fetch_size: 25
+  flyway:
+    enabled: true
+  data:
+    redis:
+      repositories:
+        enabled: false
+    web:
+      pageable:
+        default-page-size: 20
+        max-page-size: 100
+  freemarker:
+    check-template-location: false
+  mvc:
+    problemdetails:
+      enabled: true
+  graphql:
+    graphiql:
+      enabled: true
+
+mybatis:
+  mapper-locations: classpath:mapper/*.xml
+  configuration:
+    map-underscore-to-camel-case: true
+
+financing:
+  dual-sign-threshold: 10000.00
+  default-actor-name: Elena Rostova (Executive VP)
+  problem-type-base-uri: https://api.rydata.io/errors/
+
+server:
+  port: 8080
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+
+logging:
+  structured:
+    format:
+      console: logstash
+  level:
+    io.rydata.platform.financing: INFO
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html

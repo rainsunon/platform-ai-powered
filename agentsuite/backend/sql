@@ -1,0 +1,336 @@
+-- Enable required extensions
+CREATE EXTENSION IF NOT EXISTS timescaledb;
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
+-- Create enum types
+CREATE TYPE user_role AS ENUM ('admin', 'analyst', 'operator', 'auditor');
+CREATE TYPE workflow_status AS ENUM ('draft', 'active', 'paused', 'error', 'archived');
+CREATE TYPE bot_status AS ENUM ('idle', 'running', 'error', 'offline', 'maintenance');
+CREATE TYPE bot_type AS ENUM ('web', 'desktop', 'api', 'ai_agent');
+CREATE TYPE task_status AS ENUM ('pending', 'claimed', 'completed', 'escalated');
+CREATE TYPE task_priority AS ENUM ('low', 'medium', 'high', 'critical');
+CREATE TYPE event_type AS ENUM (
+    'bot_action',
+    'human_action',
+    'api_call',
+    'system_event',
+    'error',
+    'decision',
+    'checkpoint'
+);
+CREATE TYPE notification_type AS ENUM ('email', 'slack', 'webhook', 'in_app');
+
+-- Create tenants table
+CREATE TABLE tenants (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name VARCHAR(255) NOT NULL,
+    slug VARCHAR(100) UNIQUE NOT NULL,
+    plan VARCHAR(50) NOT NULL DEFAULT 'free',
+    settings JSONB NOT NULL DEFAULT '{}',
+    is_active BOOLEAN DEFAULT true,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Create users table
+CREATE TABLE users (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    email VARCHAR(255) UNIQUE NOT NULL,
+    hashed_password VARCHAR(255) NOT NULL,
+    full_name VARCHAR(255) NOT NULL,
+    role user_role NOT NULL DEFAULT 'operator',
+    avatar_url TEXT,
+    is_active BOOLEAN DEFAULT true,
+    last_login_at TIMESTAMPTZ,
+    refresh_token TEXT,
+    password_changed_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Create roles table for RBAC
+CREATE TABLE roles (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    name VARCHAR(100) NOT NULL,
+    permissions JSONB NOT NULL DEFAULT '[]',
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(tenant_id, name)
+);
+
+-- Create bot_agents table
+CREATE TABLE bot_agents (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    name VARCHAR(255) NOT NULL,
+    type bot_type NOT NULL,
+    status bot_status NOT NULL DEFAULT 'idle',
+    capabilities JSONB NOT NULL DEFAULT '[]',
+    configuration JSONB NOT NULL DEFAULT '{}',
+    metrics JSONB NOT NULL DEFAULT '{}',
+    last_heartbeat_at TIMESTAMPTZ,
+    api_key_hash TEXT,
+    version VARCHAR(50),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Create workflow_definitions table
+CREATE TABLE workflow_definitions (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    name VARCHAR(255) NOT NULL,
+    description TEXT,
+    version INTEGER NOT NULL DEFAULT 1,
+    status workflow_status NOT NULL DEFAULT 'draft',
+    definition JSONB NOT NULL DEFAULT '{}',
+    schedule JSONB,
+    created_by UUID REFERENCES users(id),
+    tags TEXT[],
+    estimated_duration INTEGER, -- in seconds
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Create workflow_executions table
+CREATE TABLE workflow_executions (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    workflow_id UUID NOT NULL REFERENCES workflow_definitions(id),
+    tenant_id UUID NOT NULL REFERENCES tenants(id),
+    temporal_workflow_id VARCHAR(255) UNIQUE,
+    status VARCHAR(50) NOT NULL DEFAULT 'running',
+    started_at TIMESTAMPTZ DEFAULT NOW(),
+    completed_at TIMESTAMPTZ,
+    current_node_id VARCHAR(255),
+    variables JSONB DEFAULT '{}',
+    context JSONB DEFAULT '{}',
+    error_details JSONB,
+    triggered_by UUID REFERENCES users(id),
+    trigger_type VARCHAR(50) NOT NULL DEFAULT 'manual',
+    parent_execution_id UUID REFERENCES workflow_executions(id),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Create execution_events hypertable
+CREATE TABLE execution_events (
+    id UUID NOT NULL DEFAULT uuid_generate_v4(),
+    timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    tenant_id UUID NOT NULL REFERENCES tenants(id),
+    workflow_execution_id UUID NOT NULL REFERENCES workflow_executions(id),
+    node_id VARCHAR(255),
+    event_type event_type NOT NULL,
+    actor_id UUID REFERENCES users(id),
+    bot_id UUID REFERENCES bot_agents(id),
+    data JSONB NOT NULL DEFAULT '{}',
+    metadata JSONB DEFAULT '{}',
+    previous_event_hash TEXT,
+    event_hash TEXT NOT NULL,
+    sequence_number BIGSERIAL,
+    confidence FLOAT,
+    duration_ms INTEGER,
+    tags TEXT[]
+);
+
+-- Convert execution_events to hypertable
+SELECT create_hypertable('execution_events', 'timestamp', chunk_time_interval => INTERVAL '1 day');
+
+-- Create human_task_queue table
+CREATE TABLE human_task_queue (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    tenant_id UUID NOT NULL REFERENCES tenants(id),
+    workflow_execution_id UUID NOT NULL REFERENCES workflow_executions(id),
+    node_id VARCHAR(255) NOT NULL,
+    title VARCHAR(500) NOT NULL,
+    description TEXT,
+    priority task_priority NOT NULL DEFAULT 'medium',
+    status task_status NOT NULL DEFAULT 'pending',
+    assigned_to UUID REFERENCES users(id),
+    claimed_by UUID REFERENCES users(id),
+    context JSONB DEFAULT '{}',
+    options JSONB DEFAULT '[]',
+    deadline_at TIMESTAMPTZ,
+    resolved_by UUID REFERENCES users(id),
+    resolution JSONB,
+    resolved_at TIMESTAMPTZ,
+    es
+    escalation_level INTEGER DEFAULT 0,
+    sla_breach_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Create audit_ledger table (immutable)
+CREATE TABLE audit_ledger (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    tenant_id UUID NOT NULL REFERENCES tenants(id),
+    event_type VARCHAR(100) NOT NULL,
+    actor_id UUID REFERENCES users(id),
+    resource_type VARCHAR(100) NOT NULL,
+    resource_id UUID NOT NULL,
+    action VARCHAR(100) NOT NULL,
+    changes JSONB,
+    previous_state JSONB,
+    new_state JSONB,
+    ip_address INET,
+    user_agent TEXT,
+    chain_hash TEXT NOT NULL,
+    previous_chain_hash TEXT,
+    timestamp TIMESTAMPTZ DEFAULT NOW(),
+    metadata JSONB DEFAULT '{}'
+);
+
+-- Create semantic_object_repository table
+CREATE TABLE semantic_object_repository (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    tenant_id UUID NOT NULL REFERENCES tenants(id),
+    application_url VARCHAR(500),
+    application_name VARCHAR(255),
+    element_type VARCHAR(100),
+    semantic_description TEXT,
+    aria_attributes JSONB,
+    visual_hierarchy JSONB,
+    text_content TEXT,
+    embedding_id VARCHAR(255), -- Reference to Qdrant vector ID
+    embedding_model VARCHAR(100),
+    confidence FLOAT,
+    screenshot_path TEXT,
+    last_validated_at TIMESTAMPTZ,
+    usage_count INTEGER DEFAULT 0,
+    success_rate FLOAT,
+    tags TEXT[],
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Create notification_configs table
+CREATE TABLE notification_configs (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    tenant_id UUID NOT NULL REFERENCES tenants(id),
+    user_id UUID REFERENCES users(id),
+    notification_type notification_type NOT NULL,
+    config JSONB NOT NULL DEFAULT '{}',
+    events TEXT[] NOT NULL DEFAULT '{}',
+    is_active BOOLEAN DEFAULT true,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Create policy_violations table
+CREATE TABLE policy_violations (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    tenant_id UUID NOT NULL REFERENCES tenants(id),
+    workflow_execution_id UUID REFERENCES workflow_executions(id),
+    policy_name VARCHAR(255) NOT NULL,
+    policy_type VARCHAR(100) NOT NULL,
+    severity VARCHAR(50) NOT NULL,
+    description TEXT,
+    violating_action JSONB,
+    context JSONB,
+    resolved BOOLEAN DEFAULT false,
+    resolved_by UUID REFERENCES users(id),
+    resolution_note TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    resolved_at TIMESTAMPTZ
+);
+
+-- Create indexes
+CREATE INDEX idx_users_tenant ON users(tenant_id);
+CREATE INDEX idx_users_email ON users(email);
+CREATE INDEX idx_workflow_definitions_tenant ON workflow_definitions(tenant_id);
+CREATE INDEX idx_workflow_executions_workflow ON workflow_executions(workflow_id);
+CREATE INDEX idx_workflow_executions_tenant ON workflow_executions(tenant_id);
+CREATE INDEX idx_workflow_executions_status ON workflow_executions(status);
+CREATE INDEX idx_execution_events_workflow ON execution_events(workflow_execution_id, timestamp DESC);
+CREATE INDEX idx_execution_events_tenant_time ON execution_events(tenant_id, timestamp DESC);
+CREATE INDEX idx_execution_events_type ON execution_events(event_type, timestamp DESC);
+CREATE INDEX idx_human_task_queue_status ON human_task_queue(status, priority DESC);
+CREATE INDEX idx_human_task_queue_assignee ON human_task_queue(assigned_to, status);
+CREATE INDEX idx_human_task_queue_tenant ON human_task_queue(tenant_id, created_at DESC);
+CREATE INDEX idx_audit_ledger_tenant_time ON audit_ledger(tenant_id, timestamp DESC);
+CREATE INDEX idx_audit_ledger_resource ON audit_ledger(resource_type, resource_id);
+CREATE INDEX idx_semantic_object_tenant_app ON semantic_object_repository(tenant_id, application_name);
+CREATE INDEX idx_bot_agents_tenant ON bot_agents(tenant_id, status);
+CREATE INDEX idx_policy_violations_tenant ON policy_violations(tenant_id, created_at DESC);
+
+-- Create hypertable compression policy (after 7 days)
+SELECT add_compression_policy('execution_events', INTERVAL '7 days');
+
+-- Create retention policy (keep data for 2 years)
+SELECT add_retention_policy('execution_events', INTERVAL '2 years');
+
+-- Create continuous aggregates for analytics
+CREATE MATERIALIZED VIEW hourly_bot_metrics
+WITH (timescaledb.continuous) AS
+SELECT 
+    time_bucket('1 hour', timestamp) AS bucket,
+    tenant_id,
+    bot_id,
+    COUNT(*) AS total_events,
+    COUNT(*) FILTER (WHERE event_type = 'error') AS error_count,
+    AVG(duration_ms) AS avg_duration_ms,
+    AVG(confidence) FILTER (WHERE confidence IS NOT NULL) AS avg_confidence
+FROM execution_events
+WHERE bot_id IS NOT NULL
+GROUP BY bucket, tenant_id, bot_id;
+
+-- Create function for chain hashing in audit ledger
+CREATE OR REPLACE FUNCTION generate_chain_hash()
+RETURNS TRIGGER AS $$
+BEGIN
+    -- Get the previous chain hash
+    SELECT chain_hash INTO NEW.previous_chain_hash
+    FROM audit_ledger
+    WHERE tenant_id = NEW.tenant_id
+    ORDER BY timestamp DESC
+    LIMIT 1;
+    
+    -- Generate new chain hash
+    NEW.chain_hash = encode(
+        digest(
+            COALESCE(NEW.previous_chain_hash, '') || 
+            NEW.id::text || 
+            NEW.timestamp::text || 
+            NEW.event_type || 
+            NEW.resource_type || 
+            NEW.resource_id::text || 
+            NEW.action || 
+            COALESCE(NEW.changes::text, ''),
+            'sha256'
+        ),
+        'hex'
+    );
+    
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Create trigger for chain hashing
+CREATE TRIGGER audit_ledger_chain_hash
+    BEFORE INSERT ON audit_ledger
+    FOR EACH ROW
+    EXECUTE FUNCTION generate_chain_hash();
+
+-- Create function to update updated_at timestamp
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = NOW();
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Apply updated_at trigger to relevant tables
+CREATE TRIGGER update_tenants_updated_at BEFORE UPDATE ON tenants
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_users_updated_at BEFORE UPDATE ON users
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_workflow_definitions_updated_at BEFORE UPDATE ON workflow_definitions
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_bot_agents_updated_at BEFORE UPDATE ON bot_agents
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();

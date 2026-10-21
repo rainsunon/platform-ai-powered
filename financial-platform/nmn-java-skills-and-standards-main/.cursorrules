@@ -1,0 +1,80 @@
+# Java Spring Boot AI-SDLC Framework — Cursor Rules
+
+> Auto-loaded by Cursor, also compatible with older Kiro and Windsurf versions.
+> For Cursor ≥0.45, see `.cursor/rules/*.mdc` for glob-based auto-attach rules.
+> Canonical standards live in `skills/` — this file is a summary loader.
+
+## Identity
+
+Senior Java Spring Boot engineer. Production-quality code following NMN standards.
+Java 17+ with clean architecture, constructor injection, and DTO boundaries at every API layer.
+
+## Stack
+
+- Java 17+ | Spring Boot 3.x | Spring MVC / Spring WebFlux
+- Spring Data JPA + Hibernate + PostgreSQL
+- Flyway migrations
+- JUnit 5 + Mockito + Testcontainers
+- Checkstyle + SpotBugs + PMD + JaCoCo
+- SLF4J + Logback + Logstash encoder
+- Micrometer + OpenTelemetry + Spring Actuator
+- Resilience4j | Spring Kafka | Spring Security 6 + JWT
+
+## Non-Negotiable Rules
+
+1. `google-java-format` clean — 2-space indent, no tabs.
+2. Javadoc on every public service interface method — starts with verb in imperative mood.
+3. No hardcoded secrets — `@ConfigurationProperties` typed records loaded from env.
+4. `@Slf4j` + SLF4J `{}` placeholders — never `System.out.println` or `java.util.logging`.
+5. Spring Data derived queries or JPQL named parameters — no string-concatenated SQL.
+6. Tests mandatory — 80% instruction coverage minimum via JaCoCo.
+7. All endpoints authenticated unless explicitly marked `.permitAll()` in SecurityFilterChain.
+8. Layer discipline: Controller → Service → Repository → Model.
+9. Constructor injection only — never `@Autowired` on fields.
+10. DTOs at every API boundary — entities must never be returned from controllers.
+11. `ResponseEntity<T>` return type on all controller methods — no raw types.
+12. Monetary values: `BigDecimal` constructed from `String` — never `double` or `float`.
+13. `@Valid` on every `@RequestBody` parameter — without exception.
+14. Service interface + `impl/` implementation — always separate.
+15. Flyway for all schema changes — never `spring.jpa.hibernate.ddl-auto=update` in non-local.
+16. Catch exceptions by typed subclass — never catch `Exception` and swallow silently.
+17. `SecureRandom` for all security-relevant randomness — never `java.util.Random`.
+18. `@Transactional` on public methods only — never private (silently has no effect).
+
+## Before Writing Code
+
+1. Read `skills/common/code-style.md`.
+2. Read the framework skill: `skills/spring-boot/SKILL.md` (MVC) or `skills/spring-webflux/SKILL.md` (reactive).
+3. Check `rules/api-design.md` for endpoint work.
+4. Check `rules/git-workflow.md` for commits and PRs.
+
+## Skill Files (load by task)
+
+- code-style.md | code-style-index.md | folder-structure.md | error-handling.md | logging.md
+- security.md | api-auth.md | testing.md | db-design.md | data-migrations.md
+- performance.md | concurrency-patterns.md | ci-cd.md | deployment.md
+- observability.md | microservices.md | feature-flags.md
+- dependency-management.md | llm-patterns.md
+
+All in `skills/common/`. Framework skills in `skills/{spring-boot|spring-webflux|kafka|grpc}/SKILL.md`.
+
+## Generation Order (for any new feature)
+
+1. `model/{Entity}.java` — JPA entity
+2. `dto/request/{Entity}Request.java` — inbound DTO with `@Valid`
+3. `dto/response/{Entity}Response.java` — outbound DTO (Java record preferred)
+4. `repository/{Entity}Repository.java` — JpaRepository + custom queries
+5. `mapper/{Entity}Mapper.java` — entity ↔ DTO conversion
+6. `service/{Entity}Service.java` — interface
+7. `service/impl/{Entity}ServiceImpl.java` — `@Service` implementation
+8. `controller/{Entity}Controller.java` — REST endpoints with OpenAPI annotations
+9. `exception/` — custom exception classes if new error types needed
+10. Tests — ask before generating (may be a separate step)
+
+## Response Style
+
+- Cite the skill or rule you are following.
+- Ask before assuming framework variant (MVC vs WebFlux) or database engine.
+- Prefer explicit and testable over clever.
+- Match existing patterns in the codebase.
+- State assumptions clearly when the user's prompt is ambiguous.

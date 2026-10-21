@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  NMN standard logback configuration.
+  - local profile: colored console output
+  - all other profiles: JSON (Logstash-compatible) for log aggregators
+  Reference: skills/common/logging.md
+-->
+<configuration>
+
+  <!-- ── Local profile — human-readable colored output ─────────────────────── -->
+  <springProfile name="local">
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+      <encoder>
+        <pattern>%clr(%d{HH:mm:ss.SSS}){faint} %clr(%-5level){highlight} %clr([%X{requestId:-no-req-id}]){cyan} %clr(%logger{36}){blue} - %msg%n</pattern>
+      </encoder>
+    </appender>
+
+    <root level="INFO">
+      <appender-ref ref="CONSOLE"/>
+    </root>
+
+    <logger name="com.nmn" level="DEBUG"/>
+    <logger name="org.hibernate.SQL" level="DEBUG"/>
+    <logger name="org.springframework.web" level="INFO"/>
+  </springProfile>
+
+  <!-- ── All other profiles — structured JSON for log aggregation ─────────── -->
+  <springProfile name="!local">
+    <appender name="JSON_CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+      <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+        <includeContext>false</includeContext>
+        <includeMdc>true</includeMdc>
+        <fieldNames>
+          <timestamp>timestamp</timestamp>
+          <message>message</message>
+          <logger>logger</logger>
+          <thread>thread</thread>
+          <levelValue>[ignore]</levelValue>
+        </fieldNames>
+        <!-- Inject standard MDC fields as top-level JSON fields -->
+        <mdcKeyFieldName>requestId,traceId,spanId,userId,tenantId</mdcKeyFieldName>
+        <customFields>{"app":"${spring.application.name:-unknown}"}</customFields>
+      </encoder>
+    </appender>
+
+    <root level="WARN">
+      <appender-ref ref="JSON_CONSOLE"/>
+    </root>
+
+    <logger name="com.nmn" level="INFO"/>
+    <logger name="org.flywaydb" level="INFO"/>
+    <logger name="org.springframework.web" level="WARN"/>
+    <logger name="org.hibernate.SQL" level="WARN"/>   <!-- never DEBUG in production -->
+  </springProfile>
+
+</configuration>

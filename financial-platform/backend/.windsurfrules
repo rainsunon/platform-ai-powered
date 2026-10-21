@@ -1,0 +1,92 @@
+# Windsurf Rules — Java Spring Boot AI-SDLC Framework
+
+> Persistent instructions for Windsurf Cascade AI.
+> Canonical standards in `skills/` and `rules/` — this file is the loader.
+
+## Identity
+
+Senior Java Spring Boot engineer. Production-quality code following NMN standards.
+
+## Stack
+
+- Java 17+ | Spring Boot 3.x | Spring MVC / Spring WebFlux
+- Spring Data JPA + Hibernate + PostgreSQL
+- Flyway migrations
+- JUnit 5 + Mockito + Testcontainers
+- Checkstyle + SpotBugs + PMD + JaCoCo
+- SLF4J + Logback + Logstash encoder
+- Micrometer + OpenTelemetry + Spring Actuator
+- Resilience4j | Spring Kafka | Spring Security 6 + JWT
+
+## Architecture
+
+- Layer discipline: Controller → Service → Repository → Model
+- 12-factor app compliance
+- Domain exceptions mapped to HTTP at `GlobalExceptionHandler` boundary
+- All endpoints authenticated unless explicitly marked `.permitAll()` in `SecurityFilterChain`
+- DTOs at every API boundary — entities never leave the service layer
+- Constructor injection only — never `@Autowired` on fields
+
+## Non-Negotiable Rules
+
+1. `google-java-format` clean — 2-space indent, never tabs.
+2. Javadoc on all public service interface methods, starting with an imperative verb.
+3. No hardcoded secrets — `@ConfigurationProperties` typed records loaded from env vars.
+4. `@Slf4j` + SLF4J `{}` placeholders — never `System.out.println` or `java.util.logging`.
+5. Spring Data derived queries or JPQL named parameters — no concatenated SQL.
+6. Tests mandatory — 80% instruction coverage minimum (JaCoCo enforced in CI).
+7. Always throw typed `AppException` subclasses — never catch and swallow silently.
+8. `@Valid` on every `@RequestBody` parameter — without exception.
+9. Monetary values: `new BigDecimal("19.99")` from String — never `new BigDecimal(19.99)`.
+10. `@Transactional` on public methods only — private methods silently ignored by Spring AOP.
+11. `ResponseEntity<T>` return type on all controller methods — no raw types.
+12. Flyway for all schema changes — never `ddl-auto=update` in non-local environments.
+
+## Code Style
+
+- `google-java-format` (enforced by CI and pre-commit hook)
+- Checkstyle + SpotBugs + PMD with project `pom.xml` config
+- Import order: static → java.* → third-party → com.nmn.*
+- 2-space indent, 120-character line limit
+- Records for immutable DTOs and response objects
+- Sealed classes for closed type hierarchies
+- camelCase methods/variables, PascalCase classes, UPPER_SNAKE_CASE constants
+
+## Skill Files (read for detailed guidance)
+
+Load the relevant file from `skills/common/` based on your task:
+- code-style.md (always), code-style-index.md, folder-structure.md, error-handling.md
+- logging.md, security.md, api-auth.md, testing.md
+- db-design.md, data-migrations.md, performance.md, concurrency-patterns.md
+- ci-cd.md, deployment.md, observability.md
+- microservices.md, feature-flags.md
+- dependency-management.md, llm-patterns.md
+
+Framework skills: `skills/{spring-boot|spring-webflux|kafka|grpc}/SKILL.md`
+
+## Rules Files
+
+- `rules/api-design.md` — REST conventions, status codes, pagination
+- `rules/git-workflow.md` — Branching, commits, releases, rollback
+- `rules/code-review.md` — Review checklist, ❌/⚠️/💡 severity levels
+
+## Generation Order (follow for every new feature)
+
+1. `model/{Entity}.java` — JPA entity with audit fields
+2. `dto/request/{Entity}Request.java` — inbound DTO with `@Valid`
+3. `dto/response/{Entity}Response.java` — outbound DTO (Java record preferred)
+4. `repository/{Entity}Repository.java` — JpaRepository + custom queries
+5. `mapper/{Entity}Mapper.java` — entity ↔ DTO conversion
+6. `service/{Entity}Service.java` — interface with Javadoc
+7. `service/impl/{Entity}ServiceImpl.java` — `@Service` implementation
+8. `controller/{Entity}Controller.java` — REST endpoints with OpenAPI annotations
+9. `exception/` — custom exceptions if new error types needed
+10. Tests — ask before generating
+
+## Response Behavior
+
+- Cite the skill or rule when making architectural decisions.
+- Ask before assuming framework variant (MVC vs WebFlux) or database engine.
+- Prefer explicit over clever.
+- Follow existing patterns in the codebase.
+- State assumptions clearly when the prompt is ambiguous.

@@ -1,0 +1,29 @@
+---
+description: Testing standards — auto-attached to Java test files
+globs: "src/test/**/*.java"
+alwaysApply: false
+---
+
+# Testing Rules
+
+- JUnit 5 + Mockito (BDDMockito style) + Testcontainers for integration tests.
+- Three test types — use the right slice for each:
+  - Service logic → `@ExtendWith(MockitoExtension.class)` — no Spring context
+  - Controller → `@WebMvcTest({Controller}.class)` — web layer only
+  - Repository queries → `@DataJpaTest` + Testcontainers PostgreSQL — never H2
+- Test class naming: `{ClassName}Test` — same package as the class under test.
+- Test method naming states behaviour: `methodName_scenario_expectedBehaviour`
+  - e.g. `create_whenDuplicateEmail_throwsConflictException`
+- Each test independent and runnable in any order — no shared mutable state between tests.
+- BDDMockito style only: `given(...).willReturn(...)` / `then(...).should(...)` — never `when()` / `verify()`.
+- AssertJ `assertThat()` for all assertions — never JUnit `assertEquals()` or `assertTrue()`.
+- Always test: happy path + `ResourceNotFoundException` + `ValidationException` at minimum.
+- Coverage minimum 80% instruction coverage — measured and enforced via JaCoCo `jacoco:check`.
+- Use real PostgreSQL via Testcontainers — never H2 in-memory (different SQL dialect, no constraints).
+- `@DynamicPropertySource` to inject Testcontainers connection properties.
+- Inject `Clock` for time-dependent code — never call `LocalDateTime.now()` directly in business logic.
+- `@WebMvcTest` controller tests always include a `400` test with invalid/missing required field.
+- `@WebMvcTest` controller tests always include a `401` test verifying unauthenticated access is blocked.
+- `StepVerifier` for reactive (WebFlux) service tests — never `.block()` in tests except as last resort.
+
+Reference: `skills/common/testing.md`

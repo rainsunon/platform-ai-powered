@@ -1,0 +1,25 @@
+repos:
+  # Google Java Format — 2-space indent, enforced before every commit
+  - repo: https://github.com/pre-commit/mirrors-google-java-format
+    rev: v1.22.0
+    hooks:
+      - id: google-java-format
+        args: [--aosp]  # AOSP style = 4-space; remove for default 2-space Google style
+        additional_dependencies: ["com.google.googlejavaformat:google-java-format:1.22.0"]
+
+  # Trailing whitespace and file hygiene
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-json
+      - id: check-merge-conflict
+      - id: detect-private-key   # prevent accidental secret commits
+
+  # Secrets detection — blocks commits with hardcoded credentials
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.18.4
+    hooks:
+      - id: gitleaks

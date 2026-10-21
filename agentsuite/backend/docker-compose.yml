@@ -1,0 +1,181 @@
+version: '3.8'
+
+services:
+  # PostgreSQL with TimescaleDB
+  postgres:
+    image: timescale/timescaledb:latest-pg16
+    environment:
+      POSTGRES_DB: automation_suite
+      POSTGRES_USER: automation
+      POSTGRES_PASSWORD: automation_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/init-db.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U automation"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Qdrant Vector Database
+  qdrant:
+    image: qdrant/qdrant:latest
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    environment:
+      QDRANT__SERVICE__GRPC_PORT: 6334
+
+  # Temporal Server
+  temporal:
+    image: temporalio/auto-setup:latest
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DB: postgres12
+      DB_PORT: 5432
+      POSTGRES_USER: automation
+      POSTGRES_PWD: automation_password
+      POSTGRES_SEEDS: postgres
+    ports:
+      - "7233:7233"
+      - "8080:8080"
+
+  # Kafka (Redpanda)
+  redpanda:
+    image: docker.redpanda.com/redpandadata/redpanda:latest
+    command:
+      - redpanda start
+      - --smp 1
+      - --overprovisioned
+      - --kafka-addr internal://0.0.0.0:9092
+      - --advertise-kafka-addr localhost:9092
+      - --pandaproxy-addr internal://0.0.0.0:8082
+      - --advertise-pandaproxy-addr localhost:8082
+    ports:
+      - "9092:9092"
+      - "8082:8082"
+      - "9644:9644"
+
+  # OPA Policy Engine
+  opa:
+    image: openpolicyagent/opa:latest
+    command:
+      - run
+      - --server
+      - --log-level=info
+    ports:
+      - "8181:8181"
+    volumes:
+      - ./policies:/policies
+
+  # Backend API
+  api:
+    build: .
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql+asyncpg://automation:automation_password@postgres:5432/automation_suite
+      REDIS_URL: redis://redis:6379/0
+      TEMPORAL_HOST: temporal
+      KAFKA_BOOTSTRAP_SERVERS: redpanda:9092
+      QDRANT_URL: http://qdrant:6333
+      OPA_URL: http://opa:8181
+      JWT_SECRET_KEY: dev-secret-key-change-in-production
+      DEBUG: "true"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - .:/app
+    stdin_open: true
+    tty: true
+
+  # Temporal Worker
+  temporal-worker:
+    build: .
+    command: python workers/temporal/worker.py
+    environment:
+      DATABASE_URL: postgresql+asyncpg://automation:automation_password@postgres:5432/automation_suite
+      TEMPORAL_HOST: temporal
+      REDIS_URL: redis://redis:6379/0
+      JWT_SECRET_KEY: dev-secret-key-change-in-production
+    depends_on:
+      temporal:
+        condition: service_started
+      postgres:
+        condition: service_healthy
+
+  # Celery Worker
+  celery-worker:
+    build: .
+    command: celery -A app.core.celery_app worker --loglevel=info --concurrency=4
+    environment:
+      DATABASE_URL: postgresql+asyncpg://automation:automation_password@postgres:5432/automation_suite
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+
+  # Celery Beat (Scheduler)
+  celery-beat:
+    build: .
+    command: celery -A app.core.celery_app beat --loglevel=info
+    environment:
+      DATABASE_URL: postgresql+asyncpg://automation:automation_password@postgres:5432/automation_suite
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+
+  # Frontend
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+    ports:
+      - "5173:5173"
+    environment:
+      VITE_API_URL: http://localhost:8000
+    depends_on:
+      - api
+    volumes:
+      - ../frontend:/app
+      - /app/node_modules
+
+volumes:
+  postgres_data:
+  redis_data:
+  qdrant_data:
+
+networks:
+  default:
+    name: automation_network

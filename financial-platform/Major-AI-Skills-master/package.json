@@ -1,0 +1,114 @@
+{
+  "name": "major-ai-skills",
+  "version": "2.4.2",
+  "description": "Installable agentic skills / AI agent skills (SKILL.md) for Claude Code, Cursor, Codex CLI, Gemini CLI & Antigravity - 412+ professional app, token-efficiency, and common-sense skills. SEO/GEO ready.",
+  "license": "MIT",
+  "author": {
+    "name": "Ali Virgo",
+    "url": "https://github.com/alivirgo"
+  },
+  "funding": {
+    "type": "whop",
+    "url": "https://whop.com/major-ai-skills/products/buy-ali-a-coffee/"
+  },
+  "homepage": "https://alivirgo.github.io/Major-AI-Skills/",
+  "bugs": {
+    "url": "https://github.com/alivirgo/Major-AI-Skills/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alivirgo/Major-AI-Skills.git"
+  },
+  "bin": {
+    "major-ai-skills": "tools/bin/install.js"
+  },
+  "main": "skills_index.json",
+  "scripts": {
+    "index": "node tools/scripts/generate_index.js",
+    "catalog": "node tools/scripts/generate_index.js",
+    "validate": "node tools/scripts/validate_skills.js",
+    "index:check": "node tools/scripts/generate_index.js --check",
+    "marketplaces": "node tools/scripts/generate_marketplaces.js",
+    "marketplaces:check": "node tools/scripts/generate_marketplaces.js --check",
+    "test": "node --test tools/tests/*.test.js",
+    "build": "npm run index",
+    "downloads:graph": "node tools/scripts/update_download_graph.js",
+    "adoption:snapshot": "node tools/scripts/adoption_snapshot.js",
+    "prepublishOnly": "npm run validate && npm run index && npm run marketplaces",
+    "pack:check": "npm pack --dry-run"
+  },
+  "files": [
+    "skills",
+    "skills.sh.json",
+    "skills_index.json",
+    "data/skills_index.json",
+    "data/bundles.json",
+    "assets/spotlight-checkout.png",
+    "tools/bin",
+    "plugins",
+    ".claude-plugin",
+    ".agents/plugins/marketplace.json",
+    "gemini-extension.json",
+    "GEMINI.md",
+    "CATALOG.md",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md",
+    "llms.txt",
+    "llms-full.txt",
+    "docs/users",
+    "examples/spotlight/README.md",
+    "examples/spotlight/VERIFICATION.md",
+    "examples/spotlight/package.json",
+    "examples/spotlight/package-lock.json",
+    "examples/spotlight/run.cjs",
+    "examples/spotlight/fixtures"
+  ],
+  "keywords": [
+    "agent-skills",
+    "agentic-skills",
+    "ai-agent-skills",
+    "ai-agents",
+    "ai-coding",
+    "ai-workflows",
+    "ai-skills",
+    "skill-library",
+    "skill-md",
+    "SKILL.md",
+    "claude-code",
+    "claude-code-skills",
+    "cursor",
+    "cursor-skills",
+    "codex-cli",
+    "codex-skills",
+    "gemini-cli",
+    "gemini-skills",
+    "antigravity",
+    "antigravity-skills",
+    "kiro",
+    "opencode",
+    "developer-tools",
+    "npx",
+    "cad",
+    "solidworks",
+    "blender",
+    "figma",
+    "davinci-resolve",
+    "token-efficiency",
+    "prompt-engineering",
+    "geo",
+    "llms-txt",
+    "answer-engine",
+    "installable-skills"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "devDependencies": {
+    "lucide": "^1.44.0",
+    "yaml": "^2.9.0"
+  }
+}

@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<suppressions xmlns="https://jeremylong.github.io/DependencyCheck/dependency-suppression.1.3.xsd">
+
+  <!--
+    OWASP Dependency-Check suppressions.
+    Add entries here only for confirmed false positives.
+    Every suppression MUST include:
+      - <notes> explaining why this is a false positive
+      - An expiry date (suppress no longer than 90 days for anything >= CVSS 7)
+    Reference: skills/common/dependency-management.md
+  -->
+
+  <!--
+  EXAMPLE — remove this block and replace with real suppressions:
+
+  <suppress until="2026-12-31Z">
+    <notes>CVE-2023-XXXXX: affects the CLI tool, not the library we use.
+           Verified with security team on 2026-09-16.</notes>
+    <cve>CVE-2023-XXXXX</cve>
+  </suppress>
+  -->
+
+</suppressions>

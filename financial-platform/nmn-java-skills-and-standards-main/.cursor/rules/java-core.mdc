@@ -1,0 +1,28 @@
+---
+description: Core Java standards — always active for all Java files
+globs: "**/*.java"
+alwaysApply: true
+---
+
+# Java Core Rules
+
+- `google-java-format` clean — 2-space indent, never tabs.
+- Javadoc on every public service interface method — starts with an imperative verb.
+- No hardcoded secrets — `@ConfigurationProperties` typed records from env vars only.
+- `@Slf4j` + SLF4J `{}` placeholders — never `System.out.println` or `java.util.logging`.
+- Constructor injection only — never `@Autowired` on fields; use `@RequiredArgsConstructor`.
+- DTOs at every API boundary — entities must never be returned from controllers.
+- `ResponseEntity<T>` on all controller methods — no raw types.
+- `@Valid` on every `@RequestBody` parameter — without exception.
+- Typed `AppException` subclasses — never catch and swallow silently.
+- `@Transactional` on public methods only — private methods silently ignored by Spring AOP.
+- Monetary values: `new BigDecimal("19.99")` from String — never `new BigDecimal(19.99)`.
+- Layer discipline: Controller → Service → Repository → Model.
+- Service interface + `impl/` implementation — always separate.
+- Flyway for all schema changes — never `ddl-auto=update` in non-local environments.
+- No `@Data` on JPA entities — use `@Getter`/`@Setter` only.
+- Records for immutable response DTOs — `public record OrderResponse(Long id, String status) {}`.
+- `Optional<T>` as return type only — never as a field or method parameter.
+- `MDC.clear()` in filter `finally` blocks — always; thread pool reuse bleeds MDC.
+
+Reference: `skills/common/code-style.md`, `skills/spring-boot/SKILL.md`

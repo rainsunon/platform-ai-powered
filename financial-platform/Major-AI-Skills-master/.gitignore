@@ -1,0 +1,10 @@
+.skills-legacy-backup/
+.skills-staging/
+node_modules/
+.DS_Store
+*.log
+.npm-cache/
+*.tgz
+mas-ai-workflows-*.zip
+.npmrc.github
+package.json.bak-npm

@@ -1,0 +1,16 @@
+{
+  "name": "AgentSuite - Intelligent Automation Platform",
+  "short_name": "AgentSuite",
+  "description": "Proactive, adaptive, multi-agent digital workforce platform",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#3b82f6",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "64x64",
+      "type": "image/x-icon"
+    }
+  ]
+}
