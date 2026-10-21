@@ -1,0 +1,1 @@
+This is a repository for using spring ai and react
